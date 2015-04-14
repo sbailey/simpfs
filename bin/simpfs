@@ -14,9 +14,9 @@ def pixsim(psffile, specfile):
     wave = fits.getdata(specfile, 'WAVELENGTH')
     flux = fits.getdata(specfile, 'FLUX')
     
-    #- I don't know PFS throughput, so just convert brightest line to 50k counts
+    #- I don't know PFS throughput, so just convert brightest line to 10k counts
     ii, = np.where( (psf.wmin < wave) & (wave < psf.wmax) )
-    phot = 50000 * (flux / np.max(flux[ii]))
+    phot = 10000 * (flux / np.max(flux[ii]))
     
     #- Convert 1D flux[nwave] to 2D phot[nspec, nwave]
     phot = np.tile(phot, psf.nspec).reshape(psf.nspec, len(phot))

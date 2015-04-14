@@ -1,5 +1,20 @@
+Notes for simulating the Subaru Prime Focus Spectrograph (PFS).
+Uses https://github.com/sbailey/specter which was originally developed by
+Stephen Bailey for simulating the Dark Energy Spectroscopic Instrument (DESI).
+
+#- Simulate arc lines
 simpfs -i data/arc_lines.fits -p data/Map_blue_v1.dat -o blat.fits
 
+#- Extract spectra 0-4 from wavelengths 3800-6440 in steps of 1 Angstrom
 expfs -i blat.fits -p data/Map_blue_v1.dat -o foo.fits \
-    -w 4000,4100,1.0 -b 20 -s 0,5
+    -w 3800,6440,1.0 -s 0,5
     
+#- Make some plots
+ipython --pylab
+from astropy.io import fits
+wave = fits.getdata('foo.fits', 'WAVELENGTH')
+flux = fits.getdata('foo.fits', 'FLUX')
+
+plot(wave, flux[0])
+ylim(-20, 200)
+

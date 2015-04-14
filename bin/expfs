@@ -94,12 +94,12 @@ for speclo in range(specmin, specmax, opts.bundlesize):
         ymin, ymax = (ylo-ny+2, yhi+ny-2)
 
         #- wavelength along x direction
-        # nlo = int((wlo - psf.wavelength(speclo, xmin))/dw)-1
-        # nhi = int((psf.wavelength(speclo, xmax) - whi)/dw)-1
+        nlo = int((wlo - psf.wavelength(speclo, xmin))/dw)-1
+        nhi = int((psf.wavelength(speclo, xmax) - whi)/dw)-1
         
         #- wavelength along y direction
-        nlo = int((wlo - psf.wavelength(speclo, ymin))/dw)-1
-        nhi = int((psf.wavelength(speclo, ymax) - whi)/dw)-1
+        # nlo = int((wlo - psf.wavelength(speclo, ymin))/dw)-1
+        # nhi = int((psf.wavelength(speclo, ymax) - whi)/dw)-1
         
         ww = np.arange(wlo-nlo*dw, whi+(nhi+0.5)*dw, dw)
         wmin, wmax = ww[0], ww[-1]
@@ -133,24 +133,20 @@ def trim(filepath, maxchar=40):
     if len(filepath) > maxchar:
         return '...'+filepath[-maxchar:]
 
-# imghdr['EXTNAME'] = 'FLUX'
-# imghdr.add_record(dict(name='SPECMIN', value=specmin, comment='First spectrum'))
-# imghdr.add_record(dict(name='SPECMAX', value=specmax-1, comment='Last spectrum'))
-# imghdr.add_record(dict(name='NSPEC', value=specmax-specmin, comment='Number of spectra'))
-# imghdr.add_record(dict(name='WAVEMIN', value=wmin, comment='First wavelength [Angstroms]'))
-# imghdr.add_record(dict(name='WAVEMAX', value=wmax, comment='Last wavelength [Angstroms]'))
-# imghdr.add_record(dict(name='WAVESTEP', value=dw, comment='Wavelength step size [Angstroms]'))
-# imghdr.add_record(dict(name='SPECTER', value=specter.__version__, comment='https://github.com/sbailey/specter'))
-# imghdr.add_record(dict(name='IN_PSF', value=trim(opts.psf), comment='Input spectral PSF'))
-# imghdr.add_record(dict(name='IN_IMG', value=trim(opts.input), comment='Input image'))
-### hdr.append(dict(name='RESMATND', value=ndiag, comment='Number of off-diagonal from Res Matrix'))
-
 outdir = os.path.dirname(opts.output)
 if (outdir != '') and (not os.path.exists(outdir)):
     os.makedirs(outdir)
 
+hdr = fits.Header()
+hdr['CRVAL1'] = (wmin, 'Minimum wavelength [Angstrom]')
+hdr['CDELT1'] = (dw, 'Wavelength step [Angstrom]')
+hdr['CRVAL2'] = (specmin, 'First fiber number in this file')
+hdr['SPECTER'] = (specter.__version__, 'https://github.com/sbailey/specter')
+imghdr['IN_PSF'] = (trim(opts.psf), 'Input spectral PSF')
+imghdr['IN_IMG'] = (trim(opts.input), 'Input image')
+
 hdulist = fits.HDUList()
-hdulist.append(fits.ImageHDU(flux, name='FLUX'))
+hdulist.append(fits.ImageHDU(flux, name='FLUX', header=hdr))
 hdulist.append(fits.ImageHDU(ivar, name='IVAR'))
 hdulist.append(fits.ImageHDU(wavelengths, name='WAVELENGTH'))
 hdulist.append(fits.ImageHDU(Rd, name='RESOLUTION'))
