@@ -109,9 +109,11 @@ for speclo in range(specmin, specmax, opts.bundlesize):
             specrange=specrange, wmin=wmin, wmax=wmax, wlo=wlo, whi=whi)
 
         #- Do the extraction
+        #- WARNING: Some small amount of regularization is needed;
+        #- this could be tuned better.
         specflux, specivar, R = \
             ex2d(subimg, subivar, psf, specrange=specrange, wavelengths=ww,
-                xyrange=xyrange, regularize=1e-6)
+                xyrange=xyrange, regularize=1e-8)
 
         #- Fill in the final output arrays
         iispec = slice(speclo-specmin, spechi-specmin)
