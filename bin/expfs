@@ -1,0 +1,162 @@
+#!/usr/bin/env python
+
+"""
+Vanilla spectral extraction
+"""
+
+import sys
+import os
+import os.path
+import numpy as np
+from time import time
+
+from astropy.io import fits
+
+import specter
+from specter.extract import ex2d
+
+from simpfs import PFS_PSF
+
+import optparse
+parser = optparse.OptionParser(usage = "%prog [options]")
+parser.add_option("-i", "--input", type="string",  help="input image")
+parser.add_option("-p", "--psf", type="string",  help="input psf")
+parser.add_option("-o", "--output", type="string",  help="output extracted spectra")
+parser.add_option("-w", "--wavelength", type="string",  help="wavemin,wavemax,dw", default="8000.0,8200.0,1.0")
+parser.add_option("-b", "--bundlesize", type="int",  help="num spectra per bundle", default=20)
+parser.add_option("-s", "--specrange", type="string",  help="specmin,specmax", default="0,19")
+### parser.add_option("-x", "--xxx",   help="some flag", action="store_true")
+
+opts, args = parser.parse_args()
+
+#- Get wavelength grid from options
+wstart, wstop, dw = map(float, opts.wavelength.split(','))
+wavelengths = np.arange(wstart, wstop+dw/2.0, dw)
+nwave = len(wavelengths)
+
+#+ TURN THIS INTO AN OPTION
+#- Number of core wavelength bins to solve in each step
+nwstep = 50
+
+#- Get specrange from options
+specmin, specmax = map(int, opts.specrange.split(','))
+nspec = specmax-specmin
+
+#- Load input files
+psf = PFS_PSF(opts.psf)
+img, imghdr = fits.getdata(opts.input, 0, header=True)
+
+#- Make a biased noisy estimate of the inverse variance by using the data itself
+ccdreadnoise = 3.0
+imgivar = 1.0/(np.abs(img) + ccdreadnoise**2)
+
+#- Output arrays to fill
+flux = np.zeros( (nspec, nwave) )
+ivar = np.zeros( (nspec, nwave) )
+
+#- Diagonal elements of resolution matrix
+#- Should be auto calculated or turned into an option
+ndiag = 6
+Rd = np.zeros( (nspec, 2*ndiag+1, nwave) )
+
+#- Print parameters
+print """\
+#--- Extraction Parameters ---
+input:      {input}
+psf:        {psf}
+output:     {output}
+wavelength: {wstart} - {wstop} AA steps {dw}
+specrange:  {specmin} - {specmax}
+bundlesize: {bundlesize}
+#-----------------------------\
+""".format(input=opts.input, psf=opts.psf, output=opts.output,
+    wstart=wstart, wstop=wstop, dw=dw,
+    specmin=specmin, specmax=specmax, bundlesize=opts.bundlesize)
+
+#- Let's do some extractions
+for speclo in range(specmin, specmax, opts.bundlesize):
+    spechi = min(speclo+opts.bundlesize, specmax)
+    specrange = (speclo, spechi)
+
+    for iwave in range(0, len(wavelengths), nwstep):
+        #- Low and High wavelengths for the core region
+        wlo = wavelengths[iwave]
+        whi = min(wavelengths[-1], wlo + nwstep*dw)
+        
+        #- Identify subimage that covers the core wavelengths
+        xyrange = xlo,xhi,ylo,yhi = psf.xyrange(specrange, (wlo, whi))
+        subimg = img[ylo:yhi, xlo:xhi]
+        subivar = imgivar[ylo:yhi, xlo:xhi]
+    
+        #- Determine extra border wavelength extent
+        ny, nx = psf.pix(speclo, wlo).shape
+        xmin, xmax = (xlo-nx+2, xhi+nx-2)
+        ymin, ymax = (ylo-ny+2, yhi+ny-2)
+
+        #- wavelength along x direction
+        # nlo = int((wlo - psf.wavelength(speclo, xmin))/dw)-1
+        # nhi = int((psf.wavelength(speclo, xmax) - whi)/dw)-1
+        
+        #- wavelength along y direction
+        nlo = int((wlo - psf.wavelength(speclo, ymin))/dw)-1
+        nhi = int((psf.wavelength(speclo, ymax) - whi)/dw)-1
+        
+        ww = np.arange(wlo-nlo*dw, whi+(nhi+0.5)*dw, dw)
+        wmin, wmax = ww[0], ww[-1]
+        nw = len(ww)
+        
+        print "Spectra {specrange} wavelengths ({wmin:.2f}, {wmax:.2f}) -> ({wlo:.2f}, {whi:.2f})".format(\
+            specrange=specrange, wmin=wmin, wmax=wmax, wlo=wlo, whi=whi)
+
+        #- Do the extraction
+        specflux, specivar, R = \
+            ex2d(subimg, subivar, psf, specrange=specrange, wavelengths=ww,
+                xyrange=xyrange, regularize=1e-6)
+
+        #- Fill in the final output arrays
+        iispec = slice(speclo-specmin, spechi-specmin)
+        flux[iispec, iwave:iwave+nwstep+1] = specflux[:, nlo:-nhi]
+        ivar[iispec, iwave:iwave+nwstep+1] = specivar[:, nlo:-nhi]
+    
+        #- Fill diagonals of resolution matrix
+        for ispec in range(speclo, spechi):
+            #- subregion of R for this spectrum
+            ii = slice(nw*(ispec-speclo), nw*(ispec-speclo+1))
+            Rx = R[ii, ii]
+
+            for j in range(nlo,nw-nhi):
+                # Rd dimensions [nspec, 2*ndiag+1, nwave]
+                Rd[ispec-specmin, :, iwave+j-nlo] = Rx[j-ndiag:j+ndiag+1, j]
+                            
+#- Write output
+def trim(filepath, maxchar=40):
+    if len(filepath) > maxchar:
+        return '...'+filepath[-maxchar:]
+
+# imghdr['EXTNAME'] = 'FLUX'
+# imghdr.add_record(dict(name='SPECMIN', value=specmin, comment='First spectrum'))
+# imghdr.add_record(dict(name='SPECMAX', value=specmax-1, comment='Last spectrum'))
+# imghdr.add_record(dict(name='NSPEC', value=specmax-specmin, comment='Number of spectra'))
+# imghdr.add_record(dict(name='WAVEMIN', value=wmin, comment='First wavelength [Angstroms]'))
+# imghdr.add_record(dict(name='WAVEMAX', value=wmax, comment='Last wavelength [Angstroms]'))
+# imghdr.add_record(dict(name='WAVESTEP', value=dw, comment='Wavelength step size [Angstroms]'))
+# imghdr.add_record(dict(name='SPECTER', value=specter.__version__, comment='https://github.com/sbailey/specter'))
+# imghdr.add_record(dict(name='IN_PSF', value=trim(opts.psf), comment='Input spectral PSF'))
+# imghdr.add_record(dict(name='IN_IMG', value=trim(opts.input), comment='Input image'))
+### hdr.append(dict(name='RESMATND', value=ndiag, comment='Number of off-diagonal from Res Matrix'))
+
+outdir = os.path.dirname(opts.output)
+if (outdir != '') and (not os.path.exists(outdir)):
+    os.makedirs(outdir)
+
+hdulist = fits.HDUList()
+hdulist.append(fits.ImageHDU(flux, name='FLUX'))
+hdulist.append(fits.ImageHDU(ivar, name='IVAR'))
+hdulist.append(fits.ImageHDU(wavelengths, name='WAVELENGTH'))
+hdulist.append(fits.ImageHDU(Rd, name='RESOLUTION'))
+
+hdulist.writeto(opts.output, clobber=True)
+
+
+
+

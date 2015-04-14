@@ -1,0 +1,5 @@
+simpfs -i data/arc_lines.fits -p data/Map_blue_v1.dat -o blat.fits
+
+expfs -i blat.fits -p data/Map_blue_v1.dat -o foo.fits \
+    -w 4000,4100,1.0 -b 20 -s 0,5
+    

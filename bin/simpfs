@@ -46,7 +46,7 @@ parser.add_option("-o", "--output", type="string",  help="output image")
 opts, args = parser.parse_args()
 image = pixsim(opts.psf, opts.inspec)
 
-fits.writeto(opts.output, image)
+fits.writeto(opts.output, image, clobber=True)
 
     
         
