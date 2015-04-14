@@ -1,0 +1,53 @@
+#!/usr/bin/env python
+
+"""
+Try simulating the PFS spectrograph
+"""
+
+import numpy as np
+from astropy.io import fits
+
+from simpfs import PFS_PSF
+
+def pixsim(psffile, specfile):
+    psf = PFS_PSF(psffile)
+    wave = fits.getdata(specfile, 'WAVELENGTH')
+    flux = fits.getdata(specfile, 'FLUX')
+    
+    #- I don't know PFS throughput, so just convert brightest line to 50k counts
+    ii, = np.where( (psf.wmin < wave) & (wave < psf.wmax) )
+    phot = 50000 * (flux / np.max(flux[ii]))
+    
+    #- Convert 1D flux[nwave] to 2D phot[nspec, nwave]
+    phot = np.tile(phot, psf.nspec).reshape(psf.nspec, len(phot))
+    
+    #- Project photons onto the CCD
+    image = psf.project(wave, phot)
+    
+    #- Add Poisson shot noise
+    image = np.random.poisson(image)
+    
+    #- Add CCD readout noise
+    ccd_read_noise = 3.0
+    image += np.random.normal(scale=ccd_read_noise, size=image.shape)
+    
+    #- Return image converted to integers
+    return image.astype(np.int16)
+    
+#-------------------------------------------------------------------------
+import optparse
+
+parser = optparse.OptionParser(usage = "%prog [options]")
+parser.add_option("-i", "--inspec", type="string",  help="input spectra")
+parser.add_option("-p", "--psf", type="string",  help="input PSF data file")
+parser.add_option("-o", "--output", type="string",  help="output image")
+# parser.add_option("-x", "--xxx",   help="some flag", action="store_true")
+
+opts, args = parser.parse_args()
+image = pixsim(opts.psf, opts.inspec)
+
+fits.writeto(opts.output, image)
+
+    
+        
+
