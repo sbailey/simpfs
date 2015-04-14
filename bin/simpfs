@@ -11,17 +11,25 @@ from simpfs import PFS_PSF
 
 def pixsim(psffile, specfile):
     psf = PFS_PSF(psffile)
-    wave = fits.getdata(specfile, 'WAVELENGTH')
-    flux = fits.getdata(specfile, 'FLUX')
+    wave = fits.getdata(specfile, 'WAVELENGTH')  #- 1D[nwave]
+    flux = fits.getdata(specfile, 'FLUX')        #- 1D[nwave]
+    nwave = len(wave)
     
     #- I don't know PFS throughput, so just convert brightest line to 10k counts
     ii, = np.where( (psf.wmin < wave) & (wave < psf.wmax) )
     phot = 10000 * (flux / np.max(flux[ii]))
     
-    #- Convert 1D flux[nwave] to 2D phot[nspec, nwave]
-    phot = np.tile(phot, psf.nspec).reshape(psf.nspec, len(phot))
+    #- Convert 1D phot[nwave] to 2D phot[nspec, nwave]
+    phot = np.tile(phot, psf.nspec).reshape(psf.nspec, nwave)
+    
+    #- Change those to be something like
+    # phot = pfs_throughput(wave, flux)
+    #- wave is 1D[nwave], flux is 2D[nspec, nwave]
     
     #- Project photons onto the CCD
+    #- image[npixy, npixx]
+    #- wave[nwave]
+    #- phot[nspec, nwave]
     image = psf.project(wave, phot)
     
     #- Add Poisson shot noise

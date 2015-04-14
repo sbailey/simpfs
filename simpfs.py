@@ -47,6 +47,24 @@ class PFS_PSF(PSF):
         self._sigy = fit_traces(wave, np.ones([self.nspec, self.nwave]) * 1.2)
                         
     def _xypix(self, ispec, wavelength):
+        """
+        returns xslice, yslice, subimage for where the PSF is on the CCD
+        
+        Args:
+            ispec : fiber number (integer)
+            wavelength : wavelength in Angstroms
+            
+        Returns tuple of:
+            xslice : python slice object for xmin, xmax
+            yslice : python slice object for ymin, ymax
+            subimage : 2D subimage of what the PSF looks like
+            
+        e.g. this would be used as:
+        for i in range(numfibers):
+            for j in range(numwavelengths):
+                xslice, yslice, pix = psf.xypix(i, wavelengths[j])
+                image[yslice, xslice] += pix * photons[i, j]
+        """
         xc = self.x(ispec, wavelength)
         yc = self.y(ispec, wavelength)
         sigx = self._sigx.eval(ispec, wavelength)
